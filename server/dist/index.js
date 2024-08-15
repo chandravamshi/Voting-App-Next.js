@@ -7,8 +7,13 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
-// node --env-file=.env --import=tsx --watch ./src/index.ts
+const ioredis_1 = __importDefault(require("ioredis"));
+require("dotenv/config");
 const app = (0, express_1.default)();
+//const redis = new Redis(process.env.REDIS_CONNECTION_STRING);
+//const subRedis = new Redis(process.env.REDIS_CONNECTION_STRING);
+const redis = new ioredis_1.default(process.env.REDIS_CONNECTION_STRING);
+const subRedis = new ioredis_1.default(process.env.REDIS_CONNECTION_STRING);
 app.use((0, cors_1.default)());
 const server = http_1.default.createServer(app);
 const io = new socket_io_1.Server(server, {
@@ -21,5 +26,46 @@ const io = new socket_io_1.Server(server, {
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`Server is listening on port: ${PORT}`);
+});
+io.on("connection", async (socket) => {
+    const { id } = socket;
+    socket.on("join-room", async (room) => {
+        console.log("User joined room:", room);
+        const subscribedRooms = await redis.smembers("subscribed-rooms");
+        await socket.join(room);
+        await redis.sadd(`rooms:${id}`, room);
+        await redis.hincrby("room-connections", room, 1);
+        if (!subscribedRooms.includes(room)) {
+            subRedis.subscribe(room, async (err) => {
+                if (err) {
+                    console.error("Failed to subscribe:", err);
+                }
+                else {
+                    await redis.sadd("subscribed-rooms", room);
+                    console.log("Subscribed to room:", room);
+                }
+            });
+        }
+    });
+    socket.on("disconnect", async () => {
+        const { id } = socket;
+        const joinedRooms = await redis.smembers(`rooms:${id}`);
+        await redis.del(`rooms:${id}`);
+        joinedRooms.forEach(async (room) => {
+            const remainingConnections = await redis.hincrby(`room-connections`, room, -1);
+            if (remainingConnections <= 0) {
+                await redis.hdel(`room-connections`, room);
+                subRedis.unsubscribe(room, async (err) => {
+                    if (err) {
+                        console.error("Failed to unsubscribe", err);
+                    }
+                    else {
+                        await redis.srem("subscribed-rooms", room);
+                        console.log("Unsubscribed from room:", room);
+                    }
+                });
+            }
+        });
+    });
 });
 //# sourceMappingURL=index.js.map
