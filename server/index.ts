@@ -6,9 +6,6 @@ import Redis from "ioredis";
 import "dotenv/config";
 
 const app = express();
-//const redis = new Redis(process.env.REDIS_CONNECTION_STRING);
-//const subRedis = new Redis(process.env.REDIS_CONNECTION_STRING);
-
 const redis = new Redis(process.env.REDIS_CONNECTION_STRING);
 const subRedis = new Redis(process.env.REDIS_CONNECTION_STRING);
 
@@ -28,6 +25,10 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`Server is listening on port: ${PORT}`);
 });
+
+subRedis.on("message", (channel, message) => {
+  io.to(channel).emit("room-update", message)
+})
 
 io.on("connection", async (socket) => {
   const { id } = socket;

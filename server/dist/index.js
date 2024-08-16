@@ -10,8 +10,6 @@ const socket_io_1 = require("socket.io");
 const ioredis_1 = __importDefault(require("ioredis"));
 require("dotenv/config");
 const app = (0, express_1.default)();
-//const redis = new Redis(process.env.REDIS_CONNECTION_STRING);
-//const subRedis = new Redis(process.env.REDIS_CONNECTION_STRING);
 const redis = new ioredis_1.default(process.env.REDIS_CONNECTION_STRING);
 const subRedis = new ioredis_1.default(process.env.REDIS_CONNECTION_STRING);
 app.use((0, cors_1.default)());
@@ -26,6 +24,9 @@ const io = new socket_io_1.Server(server, {
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`Server is listening on port: ${PORT}`);
+});
+subRedis.on("message", (channel, message) => {
+    io.to(channel).emit("room-update", message);
 });
 io.on("connection", async (socket) => {
     const { id } = socket;
